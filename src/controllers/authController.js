@@ -81,7 +81,6 @@ exports.register = async (req, res, next) => {
           username,
           otpVerification: otpVerification._id,
         });
-        
       } else {
         user = new User({
           email,
@@ -171,7 +170,7 @@ exports.requestNewOtp = async (req, res, next) => {
     const now = Date.now();
 
     if (now - new Date(otpVerification.sentAt).getTime() < OTP_COOLDOWN) {
-      return res.status(429).send("Please wait before requesting a new OTP");
+      throw new HttpError(429, "Please wait before requesting a new OTP");
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
