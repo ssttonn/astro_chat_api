@@ -7,6 +7,7 @@ const User = mongoose.model("User", {
     type: String,
     required: true,
     trim: true,
+    unique: true,
   },
   email: {
     type: String,
@@ -30,6 +31,7 @@ const User = mongoose.model("User", {
       }
     },
   },
+  avatar: String,
   otpVerification: {
     type: mongoose.Schema.Types.ObjectId,
     ref: OTPVerification, 

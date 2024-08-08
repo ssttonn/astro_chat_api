@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const authController = require("../controllers/authController");
-const {body, header} = require('express-validator');
+const {body, header, param} = require('express-validator');
 
 router.use(express.urlencoded({ extended: true }));
 
@@ -23,6 +23,8 @@ router.post("/register/resend-otp", [
     body('email').not().isEmpty().withMessage('Email is required'),
     body('email').isEmail().not().withMessage('Invalid email address')
 ], authController.requestNewOtp);
+
+router.get("/register/user-exists", authController.checkUserExists);
 
 router.post("/register", [
     body('email').not().isEmpty().withMessage('Email is required'),

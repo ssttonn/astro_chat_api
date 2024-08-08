@@ -35,6 +35,11 @@ exports.register = async (req, res, next) => {
     }
 
     const { email, password, username } = req.body;
+    let existingUsernameCount = await User.countDocuments({ username }).exec();
+
+    if (existingUsernameCount > 0) {
+      throw new HttpError(400, `${username} has already been taken, please choose another username`);
+    }
 
     let existingUser = await User.findOne({ email: email }).populate("otpVerification").exec();
 
@@ -76,6 +81,8 @@ exports.register = async (req, res, next) => {
       }
 
       if (user) {
+        
+
         user.set({
           password: hashedPassword,
           username,
@@ -353,6 +360,34 @@ exports.refreshToken = async (req, res, next) => {
     return next(error);
   }
 };
+
+exports.checkUserExists = async (req, res, next) => {
+  try {
+    const { email, username } = req.query;
+
+    if (!email && !username) {
+      throw new HttpError(400, "Email or username is required");
+    }
+
+    let query = {};
+
+    if (email) {
+      query.email = email;
+    }
+
+    if (username) {
+      query.username = username;
+    }
+
+    const existingUser = await User.findOne(query).exec();
+
+    const isExists = (existingUser && existingUser?.isVerified) || false;
+
+    return Response.success(res, 200, isExists);
+  } catch (error) {
+    return next(error);
+  }
+}
 
 const _generateAccessTokenPayload = (user) => {
   const { _id, email, password } = user;
