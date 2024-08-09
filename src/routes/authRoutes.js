@@ -37,4 +37,9 @@ router.post('/refresh-token',[
     header('authorization').not().isEmpty().withMessage('Refresh token is required')
 ], authController.refreshToken);
 
+router.post('/reset-password', [
+    body('email').not().isEmpty().withMessage('Email is required'),
+    body('email').isEmail().withMessage('Invalid email address')
+], authController.resetPassword);
+
 module.exports = router;

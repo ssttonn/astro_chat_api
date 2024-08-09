@@ -6,6 +6,8 @@ const Response = require("../utils/responseHandler");
 const nodemailer = require("nodemailer");
 const { validationResult } = require("express-validator");
 const crypto = require("crypto");
+const ResetPassword = require("../models/resetPassword");
+var os = require("os");
 
 const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_SERVER_HOST,
@@ -386,6 +388,59 @@ exports.checkUserExists = async (req, res, next) => {
     return Response.success(res, 200, isExists);
   } catch (error) {
     return next(error);
+  }
+}
+
+exports.resetPassword = async (req, res, next) => {
+  try {
+    const { email, method } = req.body;
+
+    const userCount = await User.countDocuments({ email }).exec();
+
+    if (userCount === 0) {
+      throw new HttpError(404, "User not found, please register");
+    }
+
+    const resetPasswordToken = crypto.randomBytes(20).toString("hex");
+    const resetPasswordExpires = new Date(Date.now() + 10 * 60 * 1000); // Token expires in 10 minutes
+    
+    const resetPassword = new ResetPassword({
+      email,
+      resetToken: crypto.createHash("sha256").update(resetPasswordToken).digest("hex"),
+      expiredAt: resetPasswordExpires,
+    });
+
+    try {
+      await ResetPassword.findOneAndDelete({ email }).exec();
+      await resetPassword.save();
+
+      const mailOptions = {
+        from: process.env.EMAIL_SERVER_USER,
+        to: email,
+        subject: "Astrotify Password Reset",
+        html: `
+          <p>Hello,</p>
+          <p>We received a request to reset your password. Please click the link below to reset your password:</p>
+          <a href="${os.hostname}/reset-password?token=${resetPasswordToken}">Reset Password</a>
+          <p>If you did not request a password reset, please ignore this email.</p>
+          <p>Best regards,</p>
+          <p>Astrotify Team</p>
+          <p>Notes: This is an automated email, please do not reply to this email.</p>
+        `,
+      };
+
+      try {
+        await transporter.sendMail(mailOptions);
+      } catch (error) {
+        throw new HttpError(500, error.message || "Failed to send password reset email, please try again");
+      }
+
+      return Response.success(res, 200, undefined, "A password reset link has been sent to your email");
+    } catch (error) {
+      throw new HttpError(400, error.message, error.errors);
+    }
+  } catch (error) {
+    return next(error)
   }
 }
 
