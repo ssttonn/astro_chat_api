@@ -4,6 +4,7 @@ const { HttpError } = require("../utils");
 const Response = require("../utils/responseHandler");
 const { validationResult } = require("express-validator");
 const { DeleteObjectCommand } = require("@aws-sdk/client-s3");
+const bcrypt = require("bcrypt");
 
 exports.getProfile = async (req, res, next) => {
   try {
@@ -121,14 +122,12 @@ exports.deleteAvatar = async (req, res, next) => {
       Key: fileParts[fileParts.length - 2] + "/" + fileParts[fileParts.length - 1],
     });
 
-    console.log(fileParts[fileParts.length - 2] + "/" + fileParts[fileParts.length - 1])
-
     try {
       await s3.send(command);
     } catch (error) {
       throw new HttpError(500, error.message, error.errors);
     }
-    me.avatar = "";
+    me.avatar = undefined;
 
     try {
       await me.save();
@@ -141,3 +140,57 @@ exports.deleteAvatar = async (req, res, next) => {
     return next(error);
   }
 };
+
+exports.changePassword = async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+
+    if (!errors.isEmpty()) {
+      throw new HttpError(
+        400,
+        errors
+          .array()
+          .map((error) => error.msg)
+          .join(", "),
+        errors.array()
+      );
+    }
+
+    const { _id } = req.authUser;
+    const { currentPassword, newPassword } = req.body;
+
+
+    try {
+      const me = await User.findById(_id).select("-otpVerification").exec();
+
+      if (!me) {
+        throw new HttpError(404, "User not found, can't perform password change");
+      }
+
+      const isPasswordMatch = await bcrypt.compare(currentPassword, me.password);
+
+      if (!isPasswordMatch) {
+        throw new HttpError(400, "Current password is incorrect");
+      }
+
+      if (await bcrypt.compare(newPassword, me.password)) {
+        throw new HttpError(400, "New password must be different from current password");
+      }
+
+      const newHashedPassword = await bcrypt.hash(newPassword, 8);
+
+      me.password = newHashedPassword;
+
+      await me.save();
+
+      // Remove password from response
+      me.password = undefined;
+
+      return Response.success(res, 200, me, "Password changed successfully");
+    } catch (error) {
+      throw new HttpError(error.statusCode || 400, error.message, error.errors);
+    }
+  } catch (error) {
+    return next(error);
+  }
+}

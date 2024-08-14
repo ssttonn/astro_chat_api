@@ -1,10 +1,18 @@
 
-const mongoose = require("mongoose");
+const mongoose = require("../db/mongoose");
 
-const ResetPassword = mongoose.model("reset_password", {
+const ResetPasswordSchema = new mongoose.Schema({
     email: String,
     resetToken: String,
+    otp: {
+        type: String,
+        required: false
+    },
     expiredAt: Date,
+    sentAt: Date
 });
+
+
+const ResetPassword = mongoose.model("reset_password", ResetPasswordSchema);
 
 module.exports = ResetPassword;

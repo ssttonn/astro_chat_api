@@ -1,13 +1,10 @@
-const mongoose = require("mongoose");
+const mongoose = require("../db/mongoose");
 const validator = require("validator");
-const OTPVerification = require("./otpVerification");
 
-const User = mongoose.model("User", {
+const UserSchema = new mongoose.Schema({
   username: {
     type: String,
-    required: true,
     trim: true,
-    unique: true,
   },
   email: {
     type: String,
@@ -22,7 +19,7 @@ const User = mongoose.model("User", {
   },
   password: {
     type: String,
-    required: true,
+    required: false,
     trim: true,
     minlength: 8,
     validate(value) {
@@ -32,15 +29,12 @@ const User = mongoose.model("User", {
     },
   },
   avatar: String,
-  otpVerification: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: OTPVerification, 
-    required: false
-  },
   isVerified: {
     type: Boolean,
     default: false,
   },
 });
+
+const User = mongoose.model("user", UserSchema);
 
 module.exports = User
