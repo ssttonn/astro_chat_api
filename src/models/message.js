@@ -37,7 +37,7 @@ const MessageSchema = new mongoose.Schema({
             ref: "message"
         }
     ],
-    readBy: [
+    seenBy: [
         {
             type: mongoose.Schema.Types.ObjectId,
             ref: "user"
