@@ -93,7 +93,7 @@ exports.addMembersToGroup = async (req, res, next) => {
   try {
     const { _id } = req.authUser;
     const { conversationId } = req.params;
-    const { members } = req.body;
+    const { members: newMembers } = req.body;
 
     const session = await mongoose.startSession();
     try {
@@ -107,12 +107,42 @@ exports.addMembersToGroup = async (req, res, next) => {
       if (!conversation) {
         throw new HttpError(404, "Conversation not found or you are not a member of this conversation");
       }
-      conversation.members = [...conversation.members, ...members];
+
+      let membersCount = await User.countDocuments({ _id: { $in: newMembers } });
+
+      if (membersCount !== newMembers.length) {
+        throw new HttpError(404, "One or more members not found");
+      }
+
+      let addedMembers = [];
+
+      for (let member of newMembers) {
+        if (member === _id) {
+          throw new HttpError(400, "You cannot add yourself to the conversation");
+        }
+
+        let parsedMember = mongoose.Types.ObjectId.createFromHexString(member);
+
+        
+        if (conversation.members.find((member) => member.equals(parsedMember))) {
+          continue;
+        }
+
+        addedMembers.push(parsedMember);
+      }
+
       await conversation.save();
 
-      if (global.io) {
-        global.io.to(`conversation/${conversationId}`).emit("conversation/membersUpdated", conversation.members);
-        global.io.to(`conversation/${conversationId}`).emit("conversation/membersAdded", members);
+      addedMembers = await User.find({ _id: { $in: addedMembers } });
+
+      conversation = await Conversation.findById(conversationId);
+
+      if (global.io && addedMembers.length > 0) {
+        global.io.to(`conversation/${conversationId}`).emit("conversation/group/membersUpdated", conversation.members);
+        global.io.to(`conversation/${conversationId}`).emit("conversation/group/membersAdded", {
+          addedMembers,
+          issuer: _id,
+        });
       }
       
       await session.commitTransaction();

@@ -1,5 +1,5 @@
 const express = require('express');
-const { body, query } = require('express-validator');
+const { body, query, param } = require('express-validator');
 const validationErrorsHandler = require('../../../middlewares/validationErrorsHandler');
 const groupChatController = require('../../../controllers/chat/group/groupChatController');
 
@@ -26,7 +26,7 @@ router.delete("/:conversationId/leave", [
 router.patch("/:conversationId/members/add", [
     body("members").isArray().withMessage("Members must be an array"),
     body("members").isLength({ min: 1 }).withMessage("At least one member are required"),
-    query("conversationId").not().isEmpty().withMessage("Conversation ID is required"),
+    param("conversationId").not().isEmpty().withMessage("Conversation ID is required"),
 ], validationErrorsHandler, groupChatController.addMembersToGroup)
 
 router.patch("/:conversationId/members/remove", [

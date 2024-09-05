@@ -7,7 +7,7 @@ const { ObjectId } = require("mongoose").Types;
 const SocketResponse = require("../../utils/socketHandler");
 
 global.io.on("connection", (socket) => {
-  socket.on("chat/join", async (data, ack) => {
+  socket.on("conversation/join", async (data, ack) => {
     try {
       const { conversationId } = data;
       const parsedId = ObjectId.createFromHexString(conversationId);
@@ -25,7 +25,11 @@ global.io.on("connection", (socket) => {
         throw new Error("Conversation not found");
       }
 
-      await socket.join(`chat/${conversation.id}`);
+      if (!conversation.members.map((member) => member.id).includes(socket.authUser._id)) {
+        throw new Error("You are not a member of this conversation");
+      }
+
+      await socket.join(`conversation/${conversation.id}`);
 
       return ack(SocketResponse.success(true, "Joined conversation"));
     } catch (error) {
@@ -33,7 +37,7 @@ global.io.on("connection", (socket) => {
     }
   });
 
-  socket.on("chat/leave", async (conversationId, ack) => {
+  socket.on("conversation/leave", async (conversationId, ack) => {
     try {
       const sockets = await io.in(`chat/${conversationId}`).fetchSockets();
 
@@ -41,7 +45,7 @@ global.io.on("connection", (socket) => {
         throw new Error("You are not in this conversation");
       }
 
-      await socket.leave(`chat/${conversationId}`);
+      await socket.leave(`conversation/${conversationId}`);
 
       return ack(SocketResponse.success(true, "Left conversation"));
     } catch (error) {
