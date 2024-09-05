@@ -7,7 +7,10 @@ const connectionURL = `mongodb+srv://${process.env.MONGO_USERNAME}:${process.env
 
 mongoose.plugin(idConversionPlugin);
 
-mongoose.connect(connectionURL).then(async (_) => {
+mongoose.connect(connectionURL, {
+  minPoolSize: 0,
+  maxPoolSize: 10,
+}).then(async (_) => {
   console.log("MongoDB connected")
 });
 

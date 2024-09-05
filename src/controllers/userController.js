@@ -18,13 +18,14 @@ exports.searchUsers = async (req, res, next) => {
       : {};
 
     try {
-      const users = await User.find(searchFilterQuery)
-        .select(["-password", "-otpVerification"])
-        .skip(skip)
-        .limit(parsedLimit)
-        .exec();
-
-      const totalUsers = await User.countDocuments(searchFilterQuery);
+      const [users, totalUsers] = await Promise.all([
+        User.find(searchFilterQuery)
+          .select(["-otpVerification"])
+          .skip(skip)
+          .limit(parsedLimit)
+          .exec(),
+        User.countDocuments(searchFilterQuery),
+      ]);
 
       return Response.success(res, 200, paginateResult(totalUsers, users));
     } catch (error) {
@@ -60,7 +61,7 @@ exports.userDetail = async (req, res, next) => {
     }   
 
     try {
-      const user = await User.findOne(query).select(["-password", "-otpVerification"]).exec();
+      const user = await User.findOne(query).select(["-otpVerification"]).exec();
 
       if (!user) {
         throw new HttpError(404, "User not found");

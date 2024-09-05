@@ -5,12 +5,14 @@ const MessageSchema = new mongoose.Schema({
     conversationId: {
         type: mongoose.Schema.Types.ObjectId,
         required: true,
-        ref: Conversation
+        ref: Conversation,
+        index: true
     },
     senderId: {
         type: mongoose.Schema.Types.ObjectId,
         required: true,
-        ref: "user"
+        ref: "user",
+        index: true
     },
     content: {
         type: String,
@@ -28,19 +30,22 @@ const MessageSchema = new mongoose.Schema({
     taggedUsers: [
         {
             type: mongoose.Schema.Types.ObjectId,
-            ref: "user"
+            ref: "user",
+            index: true
         }
     ],
     replies: [
         {
             type: mongoose.Schema.Types.ObjectId,
-            ref: "message"
+            ref: "message",
+            index: true
         }
     ],
     seenBy: [
         {
             type: mongoose.Schema.Types.ObjectId,
-            ref: "user"
+            ref: "user",
+            index: true
         }
     ],
     createdAt: {
@@ -52,6 +57,42 @@ const MessageSchema = new mongoose.Schema({
         default: Date.now
     }
 });
+
+const _prePopulate = function (next) {
+    this.populate([
+        {
+            path: "replies",
+        },
+        {
+            path: "senderId",
+            select: "username email avatar",
+        },
+        {
+            path: "taggedUsers",
+            select: "username email avatar",
+        },
+        {
+            path: "seenBy",
+            select: "username email avatar",
+        }
+    ]);
+    next();
+}
+    
+
+MessageSchema.pre("find", _prePopulate);
+
+MessageSchema.pre("findOne", _prePopulate);
+
+MessageSchema.pre("findOneAndUpdate", _prePopulate);
+
+MessageSchema.post("save", function (next) {
+    this.updatedAt = Date.now();
+});
+
+MessageSchema.post("findOneAndUpdate", function (next) {
+    this.updatedAt = Date.now();
+})
 
 const Message = mongoose.model("message", MessageSchema);
 

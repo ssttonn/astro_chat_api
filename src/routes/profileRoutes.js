@@ -4,8 +4,9 @@ const router = express.Router();
 
 const profileController = require("../controllers/profileController");
 
-const { body, header } = require("express-validator");
+const { body } = require("express-validator");
 const upload = require("../middlewares/imageFileS3Multer");
+const validationErrorsHandler = require("../middlewares/validationErrorsHandler");
 
 router.get("/me", profileController.getProfile);
 
@@ -13,7 +14,7 @@ router.use(express.urlencoded({ extended: true }));
 
 router.patch("/me", [
     body("username").optional().isString().withMessage("Username must be a string"),
-], profileController.updateProfile);
+], validationErrorsHandler, profileController.updateProfile);
 
 router.put("/me/avatar", upload.single('avatar'), profileController.uploadAvatar);
 
@@ -29,6 +30,6 @@ router.put("/me/password", [
         minNumbers: 1,
         minLowercase: 1
     }).withMessage("New password must have at least 8 characters, with 1 number, 1 uppercase, 1 lowercase and 1 symbol"),
-], profileController.changePassword);
+], validationErrorsHandler, profileController.changePassword);
 
 module.exports = router;

@@ -9,9 +9,20 @@ const ResetPasswordSchema = new mongoose.Schema({
         required: false
     },
     expiredAt: Date,
-    sentAt: Date
+    sentAt: Date,
+    updatedAt: {
+        type: Date,
+        default: Date.now
+    }
 });
 
+ResetPasswordSchema.post("save", function (next) {
+    this.updatedAt = Date.now();
+});
+
+ResetPasswordSchema.post("findOneAndUpdate", function (next) {
+    this.updatedAt = Date.now();
+})
 
 const ResetPassword = mongoose.model("reset_password", ResetPasswordSchema);
 

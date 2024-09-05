@@ -38,6 +38,33 @@ const ConversationSchema = new mongoose.Schema(
   }
 );
 
+  const _prePopulate = function (next) {
+    this.populate([
+      {
+        path: "members",
+        select: "username email avatar",
+      },
+      {
+        path: "lastMessage",
+      }
+    ]);
+    next();
+  }
+
+ConversationSchema.pre("find", _prePopulate)
+
+ConversationSchema.pre("findOne", _prePopulate)
+
+ConversationSchema.pre("findOneAndUpdate", _prePopulate)
+
+ConversationSchema.post("save", function (next) {
+  this.updatedAt = Date.now();
+});
+
+ConversationSchema.post("findOneAndUpdate", function (next) {
+  this.updatedAt = Date.now();
+})
+
 const Conversation = mongoose.model("conversation", ConversationSchema);
 
 module.exports = Conversation;

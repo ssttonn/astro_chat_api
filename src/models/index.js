@@ -9,5 +9,5 @@ module.exports = {
     UserVerification,
     Conversation,
     Message,
-    ResetPassword
+    ResetPassword,
 }

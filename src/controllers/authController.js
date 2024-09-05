@@ -22,19 +22,6 @@ const OTP_COOLDOWN = 60000;
 
 exports.register = async (req, res, next) => {
   try {
-    const errors = validationResult(req);
-
-    if (!errors.isEmpty()) {
-      throw new HttpError(
-        400,
-        errors
-          .array()
-          .map((error) => error.msg)
-          .join(", "),
-        errors.array()
-      );
-    }
-
     try {
       const { email } = req.body;
 
@@ -74,7 +61,7 @@ exports.register = async (req, res, next) => {
       }
 
       await existingOtpVerification.save();
-      
+
       const findUser = await User.findOne({ email }).exec();
 
       if (!findUser) {
@@ -123,19 +110,6 @@ exports.register = async (req, res, next) => {
 
 exports.verifyOtp = async (req, res, next) => {
   try {
-    const errors = validationResult(req);
-
-    if (!errors.isEmpty()) {
-      throw new HttpError(
-        400,
-        errors
-          .array()
-          .map((error) => error.msg)
-          .join(", "),
-        errors.array()
-      );
-    }
-
     try {
       const { email, otp } = req.body;
 
@@ -246,19 +220,6 @@ exports.submitUserInfo = async (req, res, next) => {
 
 exports.requestNewOtp = async (req, res, next) => {
   try {
-    const errors = validationResult(req);
-
-    if (!errors.isEmpty()) {
-      throw new HttpError(
-        400,
-        errors
-          .array()
-          .map((error) => error.msg)
-          .join(", "),
-        errors.array()
-      );
-    }
-
     const { email } = req.body;
     const oldOTPToken = req.headers["x-otp-token"];
 
@@ -267,7 +228,7 @@ exports.requestNewOtp = async (req, res, next) => {
     if (!otpVerification) {
       throw new HttpError(400, "Invalid OTP token, please try to register again");
     }
-    
+
     const now = Date.now();
 
     if (now - new Date(otpVerification.sentAt).getTime() < OTP_COOLDOWN) {
@@ -332,19 +293,6 @@ exports.requestNewOtp = async (req, res, next) => {
 
 exports.login = async (req, res, next) => {
   try {
-    const errors = validationResult(req);
-
-    if (!errors.isEmpty()) {
-      throw new HttpError(
-        400,
-        errors
-          .array()
-          .map((error) => error.msg)
-          .join(", "),
-        errors.array()
-      );
-    }
-
     const { email, password } = req.body;
 
     const user = await User.findOne({ email }).select("+password").exec();
@@ -367,19 +315,6 @@ exports.login = async (req, res, next) => {
 
 exports.refreshToken = async (req, res, next) => {
   try {
-    const errors = validationResult(req);
-
-    if (!errors.isEmpty()) {
-      throw new HttpError(
-        400,
-        errors
-          .array()
-          .map((error) => error.msg)
-          .join(", "),
-        errors.array()
-      );
-    }
-
     const refreshToken = req.headers["authorization"]?.split(" ")[1];
 
     if (!refreshToken) {
@@ -388,13 +323,17 @@ exports.refreshToken = async (req, res, next) => {
 
     const payload = verifyRefreshToken(refreshToken);
 
-    const user = await User.findById(payload._id).exec();
+    try {
+      const user = await User.findById(payload._id).exec();
 
-    if (!user) {
-      throw new HttpError(404, "User not found, invalid refresh token");
+      if (!user) {
+        throw new HttpError(404, "User not found, invalid refresh token");
+      }
+
+      return Response.success(res, 200, _generateAccessTokenPayload(user));
+    } catch (error) {
+      throw new HttpError(error.statusCode || 400, error.message, error.errors);
     }
-
-    return Response.success(res, 200, _generateAccessTokenPayload(user));
   } catch (error) {
     return next(error);
   }
@@ -402,19 +341,6 @@ exports.refreshToken = async (req, res, next) => {
 
 exports.checkUserExists = async (req, res, next) => {
   try {
-    const errors = validationResult(req);
-
-    if (!errors.isEmpty()) {
-      throw new HttpError(
-        400,
-        errors
-          .array()
-          .map((error) => error.msg)
-          .join(", "),
-        errors.array()
-      );
-    }
-
     const { email, username } = req.query;
 
     if (!email && !username) {
@@ -443,19 +369,6 @@ exports.checkUserExists = async (req, res, next) => {
 
 exports.forgotPassword = async (req, res, next) => {
   try {
-    const errors = validationResult(req);
-
-    if (!errors.isEmpty()) {
-      throw new HttpError(
-        400,
-        errors
-          .array()
-          .map((error) => error.msg)
-          .join(", "),
-        errors.array()
-      );
-    }
-
     const { email, method } = req.body;
 
     const userCount = await User.countDocuments({ email }).exec();
@@ -539,19 +452,6 @@ exports.forgotPassword = async (req, res, next) => {
 
 exports.resetPassword = async (req, res, next) => {
   try {
-    const errors = validationResult(req);
-
-    if (!errors.isEmpty()) {
-      throw new HttpError(
-        400,
-        errors
-          .array()
-          .map((error) => error.msg)
-          .join(", "),
-        errors.array()
-      );
-    }
-
     const { newPassword, otp } = req.body;
     const resetToken = req.headers["x-reset-token"];
 

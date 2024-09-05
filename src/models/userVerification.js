@@ -20,8 +20,20 @@ const UserVerificationSchema = new mongoose.Schema({
   token: {
     type: String,
     required: false
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now
   }
 });
+
+UserVerificationSchema.post("save", function (_) {
+  this.updatedAt = Date.now();
+})
+
+UserVerificationSchema.post("findOneAndUpdate", function (_) {
+  this.updatedAt = Date.now();
+})
 
 const UserVerification = mongoose.model("user_verification", UserVerificationSchema);
 

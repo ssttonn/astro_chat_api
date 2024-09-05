@@ -27,13 +27,26 @@ const UserSchema = new mongoose.Schema({
         throw new Error("Password cannot contain 'password'");
       }
     },
+    select: false
   },
   avatar: String,
   isVerified: {
     type: Boolean,
     default: false,
   },
+  updatedAt: {
+    type: Date,
+    default: Date.now,
+  },
 });
+
+UserSchema.post("save", function (next) {
+  this.updatedAt = Date.now();
+});
+
+UserSchema.post("findOneAndUpdate", function (next) {
+  this.updatedAt = Date.now();
+})
 
 const User = mongoose.model("user", UserSchema);
 
