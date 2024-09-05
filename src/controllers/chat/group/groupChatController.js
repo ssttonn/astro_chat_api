@@ -168,3 +168,43 @@ exports.removeMembersFromGroup = async (req, res, next) => {
   }
 }
 
+exports.leaveGroup = async (req, res, next) => {
+  try {
+    const { _id } = req.authUser;
+    const { conversationId } = req.params;
+
+    const session = await mongoose.startSession();
+    try {
+      session.startTransaction();
+      let conversation = await Conversation.findOne({
+        _id: conversationId,
+        members: _id,
+        type: "group",
+      });
+
+      if (!conversation) {
+        throw new HttpError(404, "Conversation not found or you are not a member of this conversation");
+      }
+
+      conversation.members = conversation.members.filter((member) => member !== _id);
+      await conversation.save();
+
+      if (global.io) {
+        global.io.to(`conversation/${conversationId}`).emit("conversation/group/membersUpdated", conversation.members);
+        global.io.to(`conversation/${conversationId}`).emit("conversation/group/memberLeft", _id);
+      }
+
+      if (conversation.members.length === 0) {
+        await Conversation.findByIdAndDelete(conversationId);
+      }
+
+      await session.commitTransaction();
+      return Response.success(res, 200, conversation);
+    } catch (error) {
+      await session.abortTransaction();
+      throw new HttpError(error.statusCode || 400, error.message, error.errors);
+    }
+  } catch (error) {
+    return next(error);
+  }
+}

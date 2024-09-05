@@ -19,10 +19,20 @@ router.post("/:conversationId/message", [
     query("conversationId").not().isEmpty().withMessage("Conversation ID is required"),
 ], validationErrorsHandler, groupChatController.sendNewGroupMessage)
 
-router.post("/:conversationId/members/add", [
+router.delete("/:conversationId/leave", [
+    query("conversationId").not().isEmpty().withMessage("Conversation ID is required"),
+], validationErrorsHandler, groupChatController.leaveGroup)
+
+router.patch("/:conversationId/members/add", [
     body("members").isArray().withMessage("Members must be an array"),
     body("members").isLength({ min: 1 }).withMessage("At least one member are required"),
     query("conversationId").not().isEmpty().withMessage("Conversation ID is required"),
 ], validationErrorsHandler, groupChatController.addMembersToGroup)
+
+router.patch("/:conversationId/members/remove", [
+    body("members").isArray().withMessage("Members must be an array"),
+    body("members").isLength({ min: 1 }).withMessage("At least one member are required"),
+    query("conversationId").not().isEmpty().withMessage("Conversation ID is required"),
+], validationErrorsHandler, groupChatController.removeMembersFromGroup)
 
 module.exports = router
