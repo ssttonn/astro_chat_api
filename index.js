@@ -4,6 +4,8 @@ const http = require("http");
 const SocketResponse = require("./src/utils/socketHandler");
 const { socketAuthMiddleware } = require("./src/middlewares/authMiddleware");
 
+const cors = require("cors");
+
 const app = express();
 
 const server = http.createServer(app);
@@ -19,6 +21,10 @@ const logger = require("./src/middlewares/logMiddleware");
 require("./src/db/mongoose");
 
 const port = process.env.PORT || 3000;
+
+app.use(cors({
+  origin: "http://localhost:5173",
+}));
 
 app.use(express.json());
 

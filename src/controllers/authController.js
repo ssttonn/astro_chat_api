@@ -505,7 +505,8 @@ const _generateAccessTokenPayload = (user) => {
   const accessToken = generateAccessToken({ _id, email, password });
   const refreshToken = generateRefreshToken({ _id, email, password });
   const now = new Date();
-  const expiresAt = new Date(now.getDate() + 2);
+  // 2 days after
+  const expiresAt = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000); 
 
   return { accessToken, refreshToken, expiresAt };
 };
