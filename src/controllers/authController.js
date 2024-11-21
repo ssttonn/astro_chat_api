@@ -1,6 +1,10 @@
 const { User, UserVerification } = require("../models");
 const { HttpError } = require("../utils");
-const { generateAccessToken, generateRefreshToken, verifyRefreshToken } = require("../utils/jwt");
+const {
+  generateAccessToken,
+  generateRefreshToken,
+  verifyRefreshToken,
+} = require("../utils/jwt");
 const bcrypt = require("bcrypt");
 const Response = require("../utils/responseHandler");
 const nodemailer = require("nodemailer");
@@ -25,17 +29,28 @@ exports.register = async (req, res, next) => {
     try {
       const { email } = req.body;
 
-      let existingEmailCount = await User.countDocuments({ email, isVerified: true }).exec();
+      let existingEmailCount = await User.countDocuments({
+        email,
+        isVerified: true,
+      }).exec();
 
       if (existingEmailCount > 0) {
-        throw new HttpError(400, `${email} has already been taken, please choose another email`);
+        throw new HttpError(
+          400,
+          `${email} has already been taken, please choose another email`
+        );
       }
 
-      let existingOtpVerification = await UserVerification.findOne({ email }).exec();
+      let existingOtpVerification = await UserVerification.findOne({
+        email,
+      }).exec();
 
       const now = Date.now();
 
-      if (existingOtpVerification && now - new Date(existingOtpVerification.sentAt).getTime() < OTP_COOLDOWN) {
+      if (
+        existingOtpVerification &&
+        now - new Date(existingOtpVerification.sentAt).getTime() < OTP_COOLDOWN
+      ) {
         throw new HttpError(429, "Please wait before requesting a new OTP");
       }
 
@@ -87,7 +102,10 @@ exports.register = async (req, res, next) => {
       try {
         await transporter.sendMail(mailOptions);
       } catch (error) {
-        throw new HttpError(500, error.message || "Failed to send OTP, please try again");
+        throw new HttpError(
+          500,
+          error.message || "Failed to send OTP, please try again"
+        );
       }
 
       return Response.success(
@@ -115,10 +133,16 @@ exports.verifyOtp = async (req, res, next) => {
 
       const otpToken = req.headers["x-otp-token"];
 
-      const otpVerification = await UserVerification.findOne({ email, token: otpToken }).exec();
+      const otpVerification = await UserVerification.findOne({
+        email,
+        token: otpToken,
+      }).exec();
 
       if (!otpVerification) {
-        throw new HttpError(400, "OTP token is not correct or not valid anymore");
+        throw new HttpError(
+          400,
+          "OTP token is not correct or not valid anymore"
+        );
       }
 
       if (otpVerification.otp !== otp) {
@@ -179,20 +203,31 @@ exports.submitUserInfo = async (req, res, next) => {
 
       const submitInfoToken = req.headers["x-info-token"];
 
-      const existingVerification = await UserVerification.findOne({ token: submitInfoToken }).exec();
+      const existingVerification = await UserVerification.findOne({
+        token: submitInfoToken,
+      }).exec();
 
       if (!existingVerification) {
-        throw new HttpError(400, "Submit information token is not correct or not valid anymore");
+        throw new HttpError(
+          400,
+          "Submit information token is not correct or not valid anymore"
+        );
       }
 
       const existingUserName = await User.countDocuments({ username }).exec();
 
       if (existingUserName > 0) {
-        throw new HttpError(400, "Username already taken, please choose another username");
+        throw new HttpError(
+          400,
+          "Username already taken, please choose another username"
+        );
       }
 
       if (new Date() > new Date(existingVerification.expiredAt)) {
-        throw new HttpError(400, "Submit information token has expired, please request a new token");
+        throw new HttpError(
+          400,
+          "Submit information token has expired, please request a new token"
+        );
       }
 
       const hashedPassword = await bcrypt.hash(password, 8);
@@ -207,9 +242,16 @@ exports.submitUserInfo = async (req, res, next) => {
         { new: true }
       ).exec();
 
-      await UserVerification.findByIdAndDelete(existingVerification._id || null).exec();
+      await UserVerification.findByIdAndDelete(
+        existingVerification._id || null
+      ).exec();
 
-      return Response.success(res, 201, _generateAccessTokenPayload(user), "User registered successfully");
+      return Response.success(
+        res,
+        201,
+        _generateAccessTokenPayload(user),
+        "User registered successfully"
+      );
     } catch (error) {
       throw new HttpError(error.statusCode || 400, error.message, error.errors);
     }
@@ -223,10 +265,16 @@ exports.requestNewOtp = async (req, res, next) => {
     const { email } = req.body;
     const oldOTPToken = req.headers["x-otp-token"];
 
-    let otpVerification = await UserVerification.findOne({ email, token: oldOTPToken }).exec();
+    let otpVerification = await UserVerification.findOne({
+      email,
+      token: oldOTPToken,
+    }).exec();
 
     if (!otpVerification) {
-      throw new HttpError(400, "Invalid OTP token, please try to register again");
+      throw new HttpError(
+        400,
+        "Invalid OTP token, please try to register again"
+      );
     }
 
     const now = Date.now();
@@ -270,7 +318,10 @@ exports.requestNewOtp = async (req, res, next) => {
       try {
         await transporter.sendMail(mailOptions);
       } catch (error) {
-        throw new HttpError(500, error.message || "Failed to send OTP, please try again");
+        throw new HttpError(
+          500,
+          error.message || "Failed to send OTP, please try again"
+        );
       }
 
       return Response.success(
@@ -383,10 +434,15 @@ exports.forgotPassword = async (req, res, next) => {
 
     const existingResetPassword = await ResetPassword.findOne({ email }).exec();
 
-    if (existingResetPassword && now - new Date(existingResetPassword.sentAt).getTime() < OTP_COOLDOWN) {
+    if (
+      existingResetPassword &&
+      now - new Date(existingResetPassword.sentAt).getTime() < OTP_COOLDOWN
+    ) {
       throw new HttpError(
         429,
-        `Please wait before requesting a new ${method === "otp" ? "OTP" : "reset password link"}`
+        `Please wait before requesting a new ${
+          method === "otp" ? "OTP" : "reset password link"
+        }`
       );
     }
 
@@ -396,7 +452,10 @@ exports.forgotPassword = async (req, res, next) => {
         { email },
         {
           email,
-          resetToken: crypto.createHash("sha256").update(resetPasswordToken).digest("hex"),
+          resetToken: crypto
+            .createHash("sha256")
+            .update(resetPasswordToken)
+            .digest("hex"),
           expiredAt: resetPasswordExpires,
           sentAt: now,
           otp: method === "otp" ? otp : undefined,
@@ -428,7 +487,11 @@ exports.forgotPassword = async (req, res, next) => {
       try {
         await transporter.sendMail(mailOptions);
       } catch (error) {
-        throw new HttpError(500, error.message || "Failed to send password reset email, please try again");
+        throw new HttpError(
+          500,
+          error.message ||
+            "Failed to send password reset email, please try again"
+        );
       }
     } catch (error) {
       throw new HttpError(400, error.message, error.errors);
@@ -443,7 +506,9 @@ exports.forgotPassword = async (req, res, next) => {
             resetPasswordExpires,
           }
         : undefined,
-      `A password reset ${method === "otp" ? "verification code" : "link"} has been sent to your email`
+      `A password reset ${
+        method === "otp" ? "verification code" : "link"
+      } has been sent to your email`
     );
   } catch (error) {
     return next(error);
@@ -455,7 +520,10 @@ exports.resetPassword = async (req, res, next) => {
     const { newPassword, otp } = req.body;
     const resetToken = req.headers["x-reset-token"];
 
-    const hashedToken = crypto.createHash("sha256").update(resetToken).digest("hex");
+    const hashedToken = crypto
+      .createHash("sha256")
+      .update(resetToken)
+      .digest("hex");
 
     const query = {
       resetToken: hashedToken,
@@ -463,7 +531,9 @@ exports.resetPassword = async (req, res, next) => {
     };
 
     try {
-      const resetPassword = await ResetPassword.findOne(query).select("+email").exec();
+      const resetPassword = await ResetPassword.findOne(query)
+        .select("+email")
+        .exec();
 
       if (!resetPassword) {
         throw new HttpError(400, `Invalid or expired password reset token`);
@@ -502,11 +572,27 @@ exports.resetPassword = async (req, res, next) => {
 
 const _generateAccessTokenPayload = (user) => {
   const { _id, email, password } = user;
-  const accessToken = generateAccessToken({ _id, email, password });
-  const refreshToken = generateRefreshToken({ _id, email, password });
+  const accessToken = generateAccessToken(
+    { _id, email, password },
+    { expiresIn: "2d" }
+  );
+  const refreshToken = generateRefreshToken(
+    { _id, email, password },
+    { expiresIn: "7d" }
+  );
   const now = new Date();
   // 2 days after
-  const expiresAt = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000); 
+  const accessTokenExpiryDate = new Date(
+    now.getTime() + 2 * 24 * 60 * 60 * 1000
+  );
+  const refreshTokenExpiryDate = new Date(
+    now.getTime() + 7 * 24 * 60 * 60 * 1000
+  ); // 7 days after
 
-  return { accessToken, refreshToken, expiresAt };
+  return {
+    accessToken,
+    refreshToken,
+    accessTokenExpiryDate,
+    refreshTokenExpiryDate,
+  };
 };
