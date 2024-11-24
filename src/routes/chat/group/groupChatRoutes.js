@@ -16,7 +16,7 @@ router.post("/:conversationId/message", [
     body("content").not().isEmpty().withMessage("Content is required"),
     body("type").not().isEmpty().withMessage("Message type is required"),
     body("type").isIn(["text", "image", "video", "audio", "emoji"]).withMessage("Invalid message type, must be text, image, video, audio or emoji"),
-    query("conversationId").not().isEmpty().withMessage("Conversation ID is required"),
+    param("conversationId").not().isEmpty().withMessage("Conversation ID is required"),
 ], validationErrorsHandler, groupChatController.sendNewGroupMessage)
 
 router.delete("/:conversationId/leave", [

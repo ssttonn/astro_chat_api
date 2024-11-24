@@ -55,11 +55,16 @@ exports.sendNewGroupMessage = async (req, res, next) => {
     const session = await mongoose.startSession();
     try {
       session.startTransaction();
-      const conversation = await Conversation.findOne({
+
+      let query = {
         _id: conversationId,
         members: _id,
-        type: conversationType,
-      });
+      }
+
+      if (conversationType) {
+        query.type = conversationType;
+      }
+      const conversation = await Conversation.findOne(query);
 
       if (!conversation) {
         throw new HttpError(404, "Conversation not found or you are not a member of this conversation");
