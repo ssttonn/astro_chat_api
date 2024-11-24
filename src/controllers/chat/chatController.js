@@ -9,6 +9,7 @@ const SocketResponse = require("../../utils/socketHandler");
 global.io.on("connection", (socket) => {
   socket.on("conversation/join", async (data, ack) => {
     try {
+      console.log(data);
       const { conversationId } = data;
       const parsedId = ObjectId.createFromHexString(conversationId);
 
@@ -31,8 +32,13 @@ global.io.on("connection", (socket) => {
 
       await socket.join(`conversation/${conversation.id}`);
 
+      if (!ack) {
+        return 
+      }
+
       return ack(SocketResponse.success(true, "Joined conversation"));
     } catch (error) {
+      console.log(error);
       return ack(SocketResponse.error(error, error.message));
     }
   });
@@ -46,6 +52,10 @@ global.io.on("connection", (socket) => {
       }
 
       await socket.leave(`conversation/${conversationId}`);
+
+      if (!ack) {
+        return 
+      }
 
       return ack(SocketResponse.success(true, "Left conversation"));
     } catch (error) {
