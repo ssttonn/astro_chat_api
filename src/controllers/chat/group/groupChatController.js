@@ -6,7 +6,7 @@ const mongoose = require("../../../db/mongoose");
 exports.createGroupConversation = async (req, res, next) => {
   try {
     const { _id } = req.authUser;
-    const { members } = req.body;
+    const { members, name, mode } = req.body;
 
     // Check if members array contains duplicates
     const uniqueMembers = [...new Set(members)];
@@ -29,13 +29,23 @@ exports.createGroupConversation = async (req, res, next) => {
         throw new HttpError(404, "One or more members not found");
       }
 
-      let setQuery = { members: [...uniqueMembers, _id], type: "group" };
+      const allMembers = [...uniqueMembers, _id]
 
-      const newConversation = await Conversation.create(setQuery);
+      let setQuery = { members: allMembers, type: "group", name: name, mode: mode };
 
+      let newConversation = await Conversation.create(setQuery);
       
+      newConversation = await Conversation.findById(newConversation._id).exec()
+
       await session.commitTransaction();
-      return Response.success(res, 201, await Conversation.findById(newConversation._id).exec());
+
+      for (let member of allMembers) {
+        if (global.io) {
+          global.io.to(`conversation/user/${member}`).emit("conversation/new", newConversation);
+        }
+      }
+
+      return Response.success(res, 201, newConversation);
     } catch (error) {
       await session.abortTransaction();
       throw new HttpError(error.statusCode || 400, error.message, error.errors);

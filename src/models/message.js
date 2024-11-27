@@ -41,13 +41,6 @@ const MessageSchema = new mongoose.Schema({
             index: true
         }
     ],
-    seenBy: [
-        {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "user",
-            index: true
-        }
-    ],
     createdAt: {
         type: Date,
         default: Date.now
@@ -69,10 +62,6 @@ const _prePopulate = function (next) {
         },
         {
             path: "taggedUsers",
-            select: "username email avatar",
-        },
-        {
-            path: "seenBy",
             select: "username email avatar",
         }
     ]);

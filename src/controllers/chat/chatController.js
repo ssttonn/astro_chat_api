@@ -7,23 +7,43 @@ const { ObjectId } = require("mongoose").Types;
 const SocketResponse = require("../../utils/socketHandler");
 
 global.io.on("connection", (socket) => {
+  socket.on("conversation/user", async ({userId}, ack) => {
+    try {
+      const sockets = await io.in(`conversation/user/${userId}`).fetchSockets();
+
+      if (sockets.some((s) => s.id === socket.id)) {  
+        throw new Error("You are already in this conversation");
+      }
+
+      console.log(`conversation/user/${userId}`);
+      await socket.join(`conversation/user/${userId}`);
+
+      if (!ack) {
+        return 
+      }
+
+      return ack(SocketResponse.success(true, "Joined conversation"));
+    } catch (error) {
+      return ack(SocketResponse.error(error, error.message));
+    }
+  })
+
   socket.on("conversation/join", async (data, ack) => {
     try {
-      console.log(data);
-      const { conversationId } = data;
+      const { conversationId, userId } = data;
       const parsedId = ObjectId.createFromHexString(conversationId);
 
-      const sockets = await io.in(`chat/${conversationId}`).fetchSockets();
+      const sockets = await io.in(`conversation/${conversationId}`).fetchSockets();
 
       if (sockets.some((s) => s.id === socket.id)) {
         throw new Error("You are already in this conversation");
       }
 
       // Check if the conversation exists
-      const conversation = await Conversation.findOne({ _id: parsedId });
+      const conversation = await Conversation.findOne({ _id: parsedId, members: userId });
 
       if (!conversation) {
-        throw new Error("Conversation not found");
+        throw new Error("Conversation not found or you are not a member of this conversation");
       }
 
       if (!conversation.members.map((member) => member.id).includes(socket.authUser._id)) {
@@ -38,7 +58,6 @@ global.io.on("connection", (socket) => {
 
       return ack(SocketResponse.success(true, "Joined conversation"));
     } catch (error) {
-      console.log(error);
       return ack(SocketResponse.error(error, error.message));
     }
   });
@@ -91,6 +110,7 @@ exports.getAllConversations = async (req, res, next) => {
           members: _id,
           ...searchFilterQuery,
         })
+          .sort({ updatedAt: -1 })
           .limit(parsedLimit)
           .skip(skip)
           .exec(),

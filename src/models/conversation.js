@@ -27,6 +27,12 @@ const ConversationSchema = new mongoose.Schema(
       ref: "message",
       required: false,
     },
+    lastEnterChat: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: User,
+      },
+    ],
     createdAt: {
       type: Date,
       default: Date.now,

@@ -35,6 +35,7 @@ exports.sendNewIndividualMessage = async (req, res, next) => {
         .select("username avatar")
         .exec();
   
+        let hasCreateNewConversation = false;
       try {
         const session = await mongoose.startSession();
         session.startTransaction();
@@ -50,6 +51,7 @@ exports.sendNewIndividualMessage = async (req, res, next) => {
             type: "individual",
           });
           await conversation.save();
+          hasCreateNewConversation = true;
         }
   
         let newMessage = await Message.create({
@@ -78,6 +80,10 @@ exports.sendNewIndividualMessage = async (req, res, next) => {
   
         await session.commitTransaction();
   
+        if (hasCreateNewConversation) {
+          global.io.to(`conversation/user/${_id}`).emit("conversation/new", conversation);
+          global.io.to(`conversation/user/${receiverId}`).emit("conversation/new", conversation);
+        }
         global.io.to(`chat/${conversation._id}`).emit("conversation/newMessage", newMessage);
   
         return Response.success(res, 201, newMessage);
