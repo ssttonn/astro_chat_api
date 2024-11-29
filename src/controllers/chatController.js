@@ -1,17 +1,18 @@
-const Conversation = require("../../models/conversation");
-const pagination = require("../../utils/pagination");
-const Response = require("../../utils/responseHandler");
-const { HttpError } = require("../../utils");
-const { Message } = require("../../models");
+const Conversation = require("../models/conversation");
+const pagination = require("../utils/pagination");
+const Response = require("../utils/responseHandler");
+const { HttpError } = require("../utils");
+const { Message } = require("../models");
 const { ObjectId } = require("mongoose").Types;
-const SocketResponse = require("../../utils/socketHandler");
+const SocketResponse = require("../utils/socketHandler");
+const mongoose = require("../db/mongoose");
 
 global.io.on("connection", (socket) => {
-  socket.on("conversation/user", async ({userId}, ack) => {
+  socket.on("conversation/user", async ({ userId }, ack) => {
     try {
       const sockets = await io.in(`conversation/user/${userId}`).fetchSockets();
 
-      if (sockets.some((s) => s.id === socket.id)) {  
+      if (sockets.some((s) => s.id === socket.id)) {
         throw new Error("You are already in this conversation");
       }
 
@@ -19,41 +20,50 @@ global.io.on("connection", (socket) => {
       await socket.join(`conversation/user/${userId}`);
 
       if (!ack) {
-        return 
+        return;
       }
 
       return ack(SocketResponse.success(true, "Joined conversation"));
     } catch (error) {
       return ack(SocketResponse.error(error, error.message));
     }
-  })
+  });
 
   socket.on("conversation/join", async (data, ack) => {
     try {
-      const { conversationId, userId } = data;
+      const { conversationId } = data;
+      const userId = socket.authUser._id;
       const parsedId = ObjectId.createFromHexString(conversationId);
 
-      const sockets = await io.in(`conversation/${conversationId}`).fetchSockets();
+      const sockets = await io
+        .in(`conversation/${conversationId}`)
+        .fetchSockets();
 
       if (sockets.some((s) => s.id === socket.id)) {
         throw new Error("You are already in this conversation");
       }
 
       // Check if the conversation exists
-      const conversation = await Conversation.findOne({ _id: parsedId, members: userId });
+      const conversation = await Conversation.findOne({
+        _id: parsedId,
+        members: userId,
+      });
 
       if (!conversation) {
-        throw new Error("Conversation not found or you are not a member of this conversation");
+        throw new Error(
+          "Conversation not found or you are not a member of this conversation"
+        );
       }
 
-      if (!conversation.members.map((member) => member.id).includes(socket.authUser._id)) {
+      if (!conversation.members.map((member) => member.id).includes(userId)) {
         throw new Error("You are not a member of this conversation");
       }
 
+      await enterRoom(userId, conversation);
       await socket.join(`conversation/${conversation.id}`);
 
       if (!ack) {
-        return 
+        return;
       }
 
       return ack(SocketResponse.success(true, "Joined conversation"));
@@ -73,7 +83,7 @@ global.io.on("connection", (socket) => {
       await socket.leave(`conversation/${conversationId}`);
 
       if (!ack) {
-        return 
+        return;
       }
 
       return ack(SocketResponse.success(true, "Left conversation"));
@@ -83,12 +93,16 @@ global.io.on("connection", (socket) => {
   });
 });
 
-exports.getAllConversations = async (req, res, next) => {
+exports.getMyConversations = async (req, res, next) => {
   try {
     const { _id } = req.authUser;
     const { q, limit, page, type } = req.query;
 
-    const { skip, limit: parsedLimit, paginateResult } = pagination(page, limit);
+    const {
+      skip,
+      limit: parsedLimit,
+      paginateResult,
+    } = pagination(page, limit);
 
     const searchFilterQuery = q
       ? {
@@ -120,12 +134,70 @@ exports.getAllConversations = async (req, res, next) => {
         }),
       ]);
 
-      return Response.success(res, 200, paginateResult(totalConversations, conversations));
+      return Response.success(
+        res,
+        200,
+        paginateResult(totalConversations, conversations)
+      );
     } catch (error) {
       throw new HttpError(error.statusCode || 400, error.message, error.errors);
     }
   } catch (error) {
     return next(error);
+  }
+};
+
+exports.sendMessageToConversation = async (req, res, next) => {
+  try {
+    const { content, type, receivers } = req.body;
+    const { _id } = req.authUser;
+
+    if (receivers.includes(_id)) {
+      throw new HttpError(400, "You cannot send a message to yourself");
+    }
+
+    const allMembers = [...new Set([...receivers, _id])];
+
+    let conversation = await Conversation.findOne({
+      members: { $all: allMembers },
+      type: allMembers.length > 2 ? "group" : "individual",
+    });
+
+    if (!conversation) {
+      conversation = new Conversation({
+        members: allMembers,
+        type: allMembers.length > 2 ? "group" : "individual",
+        lastTimeEnterChat: {
+          [_id]: Date.now(),
+        },
+      });
+    }
+
+    const message = new Message({
+      senderId: _id,
+      content,
+      type,
+      conversationId: conversation._id,
+    });
+    let session = await mongoose.startSession();
+    try {
+      session.startTransaction();
+
+      await conversation.save({ session });
+      await message.save({ session });
+
+      await session.commitTransaction();
+
+      global.io
+        .to(`chat/${conversation._id}`)
+        .emit("conversation/newMessage", message);
+
+      return Response.success(res, 201, message);
+    } catch {
+      await session.abortTransaction();
+    }
+  } catch (e) {
+    return next(e);
   }
 };
 
@@ -145,8 +217,6 @@ exports.getConversationDetail = async (req, res, next) => {
       throw new HttpError(403, "You are not a member of this conversation");
     }
 
-    console.log(limit);
-
     const messages = await Message.find({ conversationId }).limit(limit).exec();
 
     return Response.success(res, 200, { ...conversation.toJSON(), messages });
@@ -155,6 +225,23 @@ exports.getConversationDetail = async (req, res, next) => {
   }
 };
 
+exports.getConversationByReceivers = async (req, res, next) => {
+  try {
+    const { receivers } = req.body;
+    const { _id } = req.authUser;
+
+    const allMembers = [...new Set([...receivers, _id])];
+
+    const conversation = await Conversation.findOne({
+      members: { $all: allMembers },
+      type: allMembers.length > 2 ? "group" : "individual",
+    });
+
+    return Response.success(res, 200, conversation);
+  } catch (error) {
+    return next(error);
+  }
+};
 
 exports.getConversationMessages = async (req, res, next) => {
   try {
@@ -169,13 +256,27 @@ exports.getConversationMessages = async (req, res, next) => {
       });
 
       if (conversationCount === 0) {
-        throw new HttpError(404, "Conversation not found or you are not a member of this conversation");
+        throw new HttpError(
+          404,
+          "Conversation not found or you are not a member of this conversation"
+        );
       }
 
-      const { skip, limit: parsedLimit, paginateResult } = pagination(page, limit);
+      const {
+        skip,
+        limit: parsedLimit,
+        paginateResult,
+      } = pagination(page, limit);
 
-      const messages = await Message.find({ conversationId }).limit(parsedLimit).skip(skip).exec();
-      return Response.success(res, 200, paginateResult(messages.length, messages));
+      const messages = await Message.find({ conversationId })
+        .limit(parsedLimit)
+        .skip(skip)
+        .exec();
+      return Response.success(
+        res,
+        200,
+        paginateResult(messages.length, messages)
+      );
     } catch (error) {
       throw new HttpError(error.statusCode || 400, error.message, error.errors);
     }
@@ -184,55 +285,20 @@ exports.getConversationMessages = async (req, res, next) => {
   }
 };
 
-
-exports.markMessagesAsSeen = async (req, res, next) => {
+const enterRoom = async (userId, conversation) => {
   try {
-    const { conversationId } = req.params;
-    const { _id } = req.authUser;
+    console.log(userId, Date.now());
 
-    try {
-      const conversation = await Conversation.findById(conversationId);
-
-      if (!conversation) {
-        throw new HttpError(404, "Conversation not found");
-      }
-
-      if (!conversation.members.map((member) => member.id).includes(_id)) {
-        throw new HttpError(403, "You are not a member of this conversation");
-      }
-
-      // Get latest message in the conversation
-      const latestMessage = await Message.findOne({ conversationId }).sort({ createdAt: -1 });
-
-      // Check if the latest message was sent by the user
-      if (latestMessage.senderId.toString() === _id) {
-        return Response.success(res, 200, latestMessage, "You have already seen the latest message");
-      }
-
-      // Check if the user has seen the latest message
-      if (latestMessage.seenBy.includes(_id)) {
-        return Response.success(res, 200, latestMessage, "You have already seen the latest message");
-      }
-
-      // Get the last message the user has seen in the conversation
-      const lastSeenMessage = await Message.findOne({ conversationId, seenBy: _id }).sort({ createdAt: -1 });
-
-      // Remove the user from the seenBy array of the last seen message
-      if (lastSeenMessage && lastSeenMessage !== latestMessage) {
-        lastSeenMessage.seenBy = lastSeenMessage.seenBy.filter((id) => id.toString() !== _id);
-        await lastSeenMessage.save();
-
-        // Add the user to the seenBy array of the latest message
-        latestMessage.seenBy.push(_id);
-
-        await latestMessage.save();
-      }
-
-      return Response.success(res, 200, latestMessage, "Messages marked as seen");
-    } catch (error) {
-      throw new HttpError(error.statusCode || 400, error.message, error.errors);
+    if (!conversation.lastTimeEnterChat) {
+      conversation.lastTimeEnterChat = {
+        [userId]: Date.now(),
+      };
     }
+
+    await conversation.save();
+
+    return conversation;
   } catch (error) {
-    return next(error);
+    throw new HttpError(error.statusCode || 400, error.message, error.errors);
   }
 };
