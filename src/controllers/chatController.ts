@@ -1,19 +1,19 @@
-import { Request, Response, NextFunction } from "express";
-import { Socket } from "socket.io";
-import { Types, Document, Model } from "mongoose";
-import Conversation from "../models/conversation";
-import pagination from "../utils/pagination";
-import ResponseHandler from "../utils/responseHandler";
-import { HttpError } from "../utils";
-import Message from "../models/message";
-import SocketResponse from "../utils/socketHandler";
+import { NextFunction, Response } from "express";
 import mongoose from "../db/mongoose";
+import { User } from "../models";
+import Conversation from "../models/conversation";
+import Message from "../models/message";
 import {
   AuthenticatedRequest,
   AuthenticatedSocket,
   PaginationRequest,
 } from "../models/types";
 import { getSocketInstance } from "../services/socketIOClient";
+import { HttpError } from "../utils";
+import pagination from "../utils/pagination";
+import ResponseHandler from "../utils/responseHandler";
+import SocketResponse from "../utils/socketHandler";
+import { Types } from "mongoose";
 
 const io = getSocketInstance();
 
@@ -182,6 +182,23 @@ export const sendMessageToConversation = async (
       throw new HttpError(400, "You cannot send a message to yourself");
     }
 
+    const regex = /#\w+/g;
+    const matches = content.match(regex) || [];
+    const userIds = [];
+
+    for (const match of matches) {
+      try {
+        const userId = Types.ObjectId.createFromHexString(match.slice(1));
+        userIds.push(userId);
+      } catch (error) {
+        continue;
+      }
+    }
+
+    const taggedUsers = await User.find({ _id: { $in: userIds } })
+      .select("username avatar")
+      .exec();
+
     const allMembers = [...new Set([...receivers, _id.toString()])];
 
     let conversation = await Conversation.findOne({
@@ -203,6 +220,7 @@ export const sendMessageToConversation = async (
       senderId: _id,
       content,
       type,
+      taggedUsers,
       conversationId: conversation._id,
     });
     let session = await mongoose.startSession();
