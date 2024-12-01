@@ -18,21 +18,18 @@ import { getSocketInstance } from "../services/socketIOClient";
 const io = getSocketInstance();
 
 io.on("connection", (socket: AuthenticatedSocket) => {
-  socket.on("conversation/user", async ({ userId }, ack) => {
+  socket.on("conversationList/user", async (_, ack) => {
     try {
-      const sockets = await io.in(`conversation/user/${userId}`).fetchSockets();
-
-      if (sockets.some((s: any) => s.id === socket.id)) {
-        throw new Error("You are already in this conversation");
-      }
-
-      await socket.join(`conversation/user/${userId}`);
+      const { _id } = socket.authUser!;
+      socket.leave(`conversationList/user/${_id}`);
+      console.log(`conversationList/user/${_id}`);
+      await socket.join(`conversationList/user/${_id}`);
 
       if (!ack) {
         return;
       }
 
-      return ack(SocketResponse.success(true, "Joined conversation"));
+      return ack(SocketResponse.success(true, "Listened to conversation list"));
     } catch (error: any) {
       return ack(SocketResponse.error(error, error.message));
     }
@@ -212,19 +209,31 @@ export const sendMessageToConversation = async (
     try {
       session.startTransaction();
 
-      await conversation.save({ session });
       await message.save({ session });
+      conversation.lastMessage = message._id;
+      await conversation.save({ session });
 
-      await session.commitTransaction();
+      for (const member of allMembers) {
+        io.to(`conversationList/user/${member}`).emit(
+          "conversationList/messageUpdated",
+          {
+            conversationId: conversation._id,
+            message,
+          }
+        );
+      }
 
-      io.to(`chat/${conversation._id}`).emit(
+      io.to(`conversation/${conversation._id}`).emit(
         "conversation/newMessage",
         message
       );
 
+      await session.commitTransaction();
+
       return ResponseHandler.success(res, 201, message);
-    } catch {
+    } catch (error: any) {
       await session.abortTransaction();
+      throw new HttpError(error.statusCode || 400, error.message, error.errors);
     }
   } catch (e) {
     return next(e);

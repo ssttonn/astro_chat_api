@@ -1,4 +1,6 @@
 function pagination<T>(page: number = 1, limit: number = 10) {
+  page = Number.parseInt(page.toString());
+  limit = Number.parseInt(limit.toString());
   const skipItem = (page - 1) * limit;
 
   return {
