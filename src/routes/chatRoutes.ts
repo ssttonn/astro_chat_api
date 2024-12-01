@@ -1,5 +1,5 @@
 import express from "express";
-import { query, body } from "express-validator";
+import { query, body, param } from "express-validator";
 import validationErrorsHandler from "../middlewares/validationErrorsHandler";
 import * as chatController from "../controllers/chatController";
 
@@ -58,6 +58,21 @@ router.post(
   ],
   validationErrorsHandler,
   chatController.sendMessageToConversation
+);
+
+router.patch(
+  "/conversation/message/:messageId",
+  [
+    query("messageId").not().isEmpty().withMessage("Message ID is required"),
+    body("content").not().isEmpty().withMessage("Message content is required"),
+  ],
+  chatController.editMessage
+);
+
+router.delete(
+  "/conversation/message/:messageId",
+  [query("messageId").not().isEmpty().withMessage("Message ID is required")],
+  chatController.deleteMessage
 );
 
 // router.use("/conversation/group", groupChatRoutes);

@@ -9,7 +9,7 @@ import {
   PaginationRequest,
 } from "../models/types";
 import { getSocketInstance } from "../services/socketIOClient";
-import { HttpError } from "../utils";
+import { CustomResponse, HttpError } from "../utils";
 import pagination from "../utils/pagination";
 import ResponseHandler from "../utils/responseHandler";
 import SocketResponse from "../utils/socketHandler";
@@ -38,20 +38,12 @@ io.on("connection", (socket: AuthenticatedSocket) => {
   socket.on("conversation/join", async (data, ack) => {
     try {
       const { conversationId } = data;
-      const userId = socket.authUser!._id;
+      const { _id } = socket.authUser!;
       const parsedId = Types.ObjectId.createFromHexString(conversationId);
-
-      const sockets = await io
-        .in(`conversation/${conversationId}`)
-        .fetchSockets();
-
-      if (sockets.some((s: any) => s.id === socket.id)) {
-        throw new Error("You are already in this conversation");
-      }
 
       const conversation = await Conversation.findOne({
         _id: parsedId,
-        members: userId,
+        members: _id,
       });
 
       if (!conversation) {
@@ -60,7 +52,7 @@ io.on("connection", (socket: AuthenticatedSocket) => {
         );
       }
 
-      await enterRoom(userId, conversationId);
+      await enterRoom(_id, conversationId);
       await socket.join(`conversation/${conversation.id}`);
 
       if (!ack) {
@@ -73,13 +65,9 @@ io.on("connection", (socket: AuthenticatedSocket) => {
     }
   });
 
-  socket.on("conversation/leave", async (conversationId, ack) => {
+  socket.on("conversation/leave", async (data, ack) => {
     try {
-      const sockets = await io.in(`chat/${conversationId}`).fetchSockets();
-
-      if (!sockets.some((s: any) => s.id === socket.id)) {
-        throw new Error("You are not in this conversation");
-      }
+      const { conversationId } = data;
 
       await socket.leave(`conversation/${conversationId}`);
 
@@ -206,6 +194,7 @@ export const sendMessageToConversation = async (
       type: allMembers.length > 2 ? "group" : "individual",
     });
 
+    let hasCreatedNewConversation = false;
     if (!conversation) {
       conversation = new Conversation({
         members: allMembers,
@@ -214,9 +203,10 @@ export const sendMessageToConversation = async (
           [_id.toString()]: Date.now(),
         },
       });
+      hasCreatedNewConversation = true;
     }
 
-    const message = new Message({
+    let message = new Message({
       senderId: _id,
       content,
       type,
@@ -231,14 +221,32 @@ export const sendMessageToConversation = async (
       conversation.lastMessage = message._id;
       await conversation.save({ session });
 
+      const foundMessage = await Message.findOne({ _id: message._id }, null, {
+        session,
+      });
+      if (!foundMessage) {
+        throw new HttpError(404, "Message not found");
+      }
+      message = foundMessage;
+
       for (const member of allMembers) {
-        io.to(`conversationList/user/${member}`).emit(
-          "conversationList/messageUpdated",
-          {
-            conversationId: conversation._id,
-            message,
-          }
-        );
+        if (hasCreatedNewConversation) {
+          io.to(`conversationList/user/${member}`).emit(
+            "conversationList/newConversation",
+            {
+              ...conversation.toJSON(),
+              lastMessage: message,
+            }
+          );
+        } else {
+          io.to(`conversationList/user/${member}`).emit(
+            "conversationList/newMessage",
+            {
+              conversationId: conversation._id,
+              message,
+            }
+          );
+        }
       }
 
       io.to(`conversation/${conversation._id}`).emit(
@@ -255,6 +263,150 @@ export const sendMessageToConversation = async (
     }
   } catch (e) {
     return next(e);
+  }
+};
+
+export const editMessage = async (
+  req: AuthenticatedRequest<
+    { messageId: string },
+    {},
+    {
+      content: string;
+    },
+    {}
+  >,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { messageId } = req.params;
+    const { content } = req.body;
+    const { _id } = req.authUser!;
+
+    const [message, conversation] = await Promise.all([
+      Message.findOne({
+        _id: messageId,
+        senderId: _id,
+      }),
+      Conversation.findOne({
+        members: _id,
+      }),
+    ]);
+
+    if (!conversation) {
+      throw new HttpError(
+        404,
+        "Conversation not found or you are not a member of this conversation"
+      );
+    }
+
+    if (!message) {
+      throw new HttpError(404, "Message not found or you are not the sender");
+    }
+
+    if (message.deletedAt) {
+      throw new HttpError(403, "Message has been deleted, cannot be edited");
+    }
+
+    if (message.type !== "text") {
+      throw new HttpError(403, "Only text message can be edited");
+    }
+
+    if (message.content === content) {
+      return ResponseHandler.success(res, 200, message);
+    }
+
+    message.content = content;
+    await message.save();
+
+    io.to(`conversation/${conversation._id}`).emit(
+      "conversation/messageUpdated",
+      message
+    );
+
+    if (
+      conversation.lastMessage &&
+      conversation.lastMessage._id.toString() === message._id.toString()
+    ) {
+      for (const member of conversation.members) {
+        console.log(`conversationList/user/${member._id}`);
+        io.to(`conversationList/user/${member._id}`).emit(
+          "conversationList/lastMessageChanged",
+          {
+            conversationId: conversation._id,
+            message,
+          }
+        );
+      }
+    }
+
+    return ResponseHandler.success(res, 200, message);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const deleteMessage = async (
+  req: AuthenticatedRequest<{ messageId: string }, {}, {}, {}>,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { messageId } = req.params;
+    const { _id } = req.authUser!;
+
+    const [message, conversation] = await Promise.all([
+      Message.findOne({
+        _id: messageId,
+        senderId: _id,
+      }),
+      Conversation.findOne({
+        members: _id,
+      }),
+    ]);
+
+    if (!conversation) {
+      throw new HttpError(
+        404,
+        "Conversation not found or you are not a member of this conversation"
+      );
+    }
+
+    if (!message) {
+      throw new HttpError(404, "Message not found or you are not the sender");
+    }
+
+    if (message.deletedAt) {
+      throw new HttpError(403, "Message has been deleted");
+    }
+
+    await Message.updateOne({ _id: messageId }, { deletedAt: Date.now() });
+
+    io.to(`conversation/${conversation._id}`).emit(
+      "conversation/messageDeleted",
+      message
+    );
+
+    if (
+      conversation.lastMessage &&
+      conversation.lastMessage._id.toString() === message._id.toString()
+    ) {
+      for (const member of conversation.members) {
+        io.to(`conversationList/user/${member}`).emit(
+          "conversationList/lastMessageDeleted",
+          {
+            conversationId: conversation._id,
+            message: null,
+          }
+        );
+      }
+    }
+
+    return ResponseHandler.success(res, 204, {
+      message: "Message deleted successfully",
+    });
+  } catch (error) {
+    return next(error);
   }
 };
 
@@ -281,20 +433,13 @@ export const getConversationDetail = async (
 
     if (
       !conversation.members
-        .map((member) => member.toString())
+        .map((member) => member._id.toString())
         .includes(_id.toString())
     ) {
       throw new HttpError(403, "You are not a member of this conversation");
     }
 
-    const messages = await Message.find({ conversationId })
-      .limit(Number(limit))
-      .exec();
-
-    return ResponseHandler.success(res, 200, {
-      ...conversation.toJSON(),
-      messages,
-    });
+    return ResponseHandler.success(res, 200, conversation);
   } catch (error) {
     return next(error);
   }
@@ -363,6 +508,7 @@ export const getConversationMessages = async (
       } = pagination(page, limit);
 
       const messages = await Message.find({ conversationId })
+        .sort({ updatedAt: -1 })
         .limit(parsedLimit)
         .skip(skip)
         .exec();
