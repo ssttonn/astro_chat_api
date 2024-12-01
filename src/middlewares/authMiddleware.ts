@@ -28,9 +28,11 @@ export const socketAuthMiddleware = (
 ) => {
   try {
     const token = socket.handshake.headers.token;
-    if (!token || !(token instanceof String)) {
+
+    if (!token) {
       throw new Error("Token is required");
     }
+
     const authUser = JWTUtils.verifyAccessToken(token as string);
     socket.authUser = authUser;
     next();

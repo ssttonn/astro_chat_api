@@ -63,15 +63,7 @@ io.on("connection", (socket: AuthenticatedSocket) => {
         );
       }
 
-      if (
-        !conversation.members
-          .map((member) => member.toString())
-          .includes(userId.toString())
-      ) {
-        throw new Error("You are not a member of this conversation");
-      }
-
-      await enterRoom(userId, conversation);
+      await enterRoom(userId, conversationId);
       await socket.join(`conversation/${conversation.id}`);
 
       if (!ack) {
@@ -360,24 +352,16 @@ export const getConversationMessages = async (
   }
 };
 
-const enterRoom = async (userId: string, conversation: any) => {
+const enterRoom = async (userId: string, conversationId: string) => {
   try {
-    let lastTimeEnterChat: any = {};
-    const conversationId = conversation.schema.paths._id;
-    if (conversation.schema.paths.lastTimeEnterChat) {
-      lastTimeEnterChat = {
-        ...conversation.schema.paths.lastTimeEnterChat,
-      };
-    }
-
-    lastTimeEnterChat[userId.toString()] = Date.now();
-
     await Conversation.updateOne(
       { _id: conversationId },
-      { $set: { lastTimeEnterChat: lastTimeEnterChat } }
+      {
+        $set: {
+          [`lastTimeEnterChat.${userId}`]: Date.now(),
+        },
+      }
     );
-
-    return conversation;
   } catch (error: any) {
     throw new HttpError(error.statusCode || 400, error.message, error.errors);
   }

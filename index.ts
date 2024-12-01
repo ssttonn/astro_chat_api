@@ -16,8 +16,6 @@ import logger from "./src/middlewares/logMiddleware";
 import notFoundHandler from "./src/middlewares/notFoundHandler";
 import router from "./src/routes";
 
-console.log("Server created");
-
 const port = process.env.PORT || 3000;
 
 app.use(
