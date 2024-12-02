@@ -52,7 +52,6 @@ io.on("connection", (socket: AuthenticatedSocket) => {
         );
       }
 
-      await enterRoom(_id, conversationId);
       await socket.join(`conversation/${conversation.id}`);
 
       if (!ack) {
@@ -60,6 +59,48 @@ io.on("connection", (socket: AuthenticatedSocket) => {
       }
 
       return ack(SocketResponse.success(true, "Joined conversation"));
+    } catch (error: any) {
+      return ack(SocketResponse.error(error, error.message));
+    }
+  });
+
+  socket.on("conversation/seen", async (data, ack) => {
+    try {
+      const { conversationId } = data;
+      const { _id } = socket.authUser!;
+
+      const seenAt = await markMessagesAsSeen(conversationId, _id);
+
+      socket.to(`conversation/${conversationId}`).emit("conversation/seen", {
+        userId: _id,
+        seenAt,
+      });
+
+      if (!ack) {
+        return;
+      }
+
+      return ack(SocketResponse.success(true, "Marked messages as seen"));
+    } catch (error: any) {
+      return ack(SocketResponse.error(error, error.message));
+    }
+  });
+
+  socket.on("conversation/typing", async (data, ack) => {
+    try {
+      const { conversationId, isTyping } = data;
+      const { _id } = socket.authUser!;
+
+      socket.to(`conversation/${conversationId}`).emit("conversation/typing", {
+        userId: _id,
+        isTyping,
+      });
+
+      if (!ack) {
+        return;
+      }
+
+      return ack(SocketResponse.success(true, "Sent typing status"));
     } catch (error: any) {
       return ack(SocketResponse.error(error, error.message));
     }
@@ -402,9 +443,14 @@ export const deleteMessage = async (
       }
     }
 
-    return ResponseHandler.success(res, 204, {
-      message: "Message deleted successfully",
-    });
+    return ResponseHandler.success(
+      res,
+      200,
+      {
+        messageId: message._id,
+      },
+      "Message deleted successfully"
+    );
   } catch (error) {
     return next(error);
   }
@@ -525,16 +571,19 @@ export const getConversationMessages = async (
   }
 };
 
-const enterRoom = async (userId: string, conversationId: string) => {
+const markMessagesAsSeen = async (conversationId: string, userId: string) => {
   try {
+    const seenAt = Date.now();
     await Conversation.updateOne(
       { _id: conversationId },
       {
         $set: {
-          [`lastTimeEnterChat.${userId}`]: Date.now(),
+          [`lastTimeEnterChat.${userId}`]: seenAt,
         },
       }
     );
+
+    return seenAt;
   } catch (error: any) {
     throw new HttpError(error.statusCode || 400, error.message, error.errors);
   }

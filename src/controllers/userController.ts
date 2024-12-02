@@ -1,10 +1,9 @@
-import { Request, Response, NextFunction } from "express";
-import { validationResult } from "express-validator";
+import { NextFunction, Request, Response } from "express";
 import { Types } from "mongoose";
 import User from "../models/user";
 import { HttpError } from "../utils";
-import ResponseHandler from "../utils/responseHandler";
 import pagination from "../utils/pagination";
+import ResponseHandler from "../utils/responseHandler";
 
 interface SearchUsersQuery {
   q?: string;
