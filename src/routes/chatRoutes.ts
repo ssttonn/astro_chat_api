@@ -75,8 +75,16 @@ router.delete(
   chatController.deleteMessage
 );
 
-// router.use("/conversation/group", groupChatRoutes);
-
-// router.use("/conversation/individual", individualChatRoutes);
+router.patch(
+  "/conversation/:conversationId",
+  [
+    query("conversationId")
+      .not()
+      .isEmpty()
+      .withMessage("Conversation ID is required"),
+    body().not().isEmpty().withMessage("Request body cannot be empty"),
+  ],
+  chatController.changeGroupConversationInfo
+);
 
 export default router;

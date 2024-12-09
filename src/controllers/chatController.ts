@@ -224,19 +224,29 @@ export const sendMessageToConversation = async (
       }
     }
 
-    const taggedUsers = await User.find({ _id: { $in: userIds } })
-      .select("username avatar")
-      .exec();
+    let taggedUsers: any[] = [];
 
+    // Find all tagged users (if any) in message content
+    if (userIds.length > 0) {
+      taggedUsers = await User.find({ _id: { $in: userIds } })
+        .select("username avatar")
+        .exec();
+    }
+
+    // Get all members of the conversation, including the sender
     const allMembers = [...new Set([...receivers, _id.toString()])];
 
+    // Find existing conversation with the same members, only group and individual conversation
     let conversation = await Conversation.findOne({
       members: { $all: allMembers },
       type: allMembers.length > 2 ? "group" : "individual",
     });
 
     let hasCreatedNewConversation = false;
+
+    // Check if conversation not found, create a new one
     if (!conversation) {
+      // Create a new conversation
       conversation = new Conversation({
         members: allMembers,
         type: allMembers.length > 2 ? "group" : "individual",
@@ -258,18 +268,24 @@ export const sendMessageToConversation = async (
     try {
       session.startTransaction();
 
-      await message.save({ session });
       conversation.lastMessage = message._id;
-      await conversation.save({ session });
 
-      const foundMessage = await Message.findOne({ _id: message._id }, null, {
+      // Save conversation and message, create new message and conversation if needed
+      await Promise.all([
+        conversation.save({ session }),
+        message.save({ session }),
+      ]);
+
+      // Find the created message, populate senderId and taggedUsers
+      const createdMessage = await Message.findOne({ _id: message._id }, null, {
         session,
       });
-      if (!foundMessage) {
+      if (!createdMessage) {
         throw new HttpError(404, "Message not found");
       }
-      message = foundMessage;
+      message = createdMessage;
 
+      // Notify all members of the conversation about the new message
       for (const member of allMembers) {
         if (hasCreatedNewConversation) {
           io.to(`conversationList/user/${member}`).emit(
@@ -421,11 +437,15 @@ export const deleteMessage = async (
       throw new HttpError(403, "Message has been deleted");
     }
 
-    await Message.updateOne({ _id: messageId }, { deletedAt: Date.now() });
+    const deletedAt = Date.now();
+    await Message.updateOne({ _id: messageId }, { deletedAt });
 
     io.to(`conversation/${conversation._id}`).emit(
       "conversation/messageDeleted",
-      message
+      {
+        ...message.toJSON(),
+        deletedAt,
+      }
     );
 
     if (
@@ -437,7 +457,7 @@ export const deleteMessage = async (
           "conversationList/lastMessageDeleted",
           {
             conversationId: conversation._id,
-            message: null,
+            messageId: message._id,
           }
         );
       }
@@ -586,5 +606,150 @@ const markMessagesAsSeen = async (conversationId: string, userId: string) => {
     return seenAt;
   } catch (error: any) {
     throw new HttpError(error.statusCode || 400, error.message, error.errors);
+  }
+};
+
+export const changeGroupConversationInfo = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { conversationId } = req.params;
+    const { _id } = req.authUser!;
+    const { name } = req.body;
+
+    let conversation = await Conversation.findOne({
+      _id: conversationId,
+      members: _id,
+      type: { $in: ["group", "channel"] },
+    });
+
+    if (!conversation) {
+      throw new HttpError(
+        404,
+        "Group conversation not found or you are not a member of this conversation"
+      );
+    }
+
+    conversation = Object.assign(conversation, { name });
+    try {
+      await conversation.save();
+    } catch (error: any) {
+      throw new HttpError(error.statusCode || 400, error.message, error.errors);
+    }
+
+    io.to(`conversation/${conversation._id}`).emit(
+      "conversation/infoUpdated",
+      conversation
+    );
+
+    return ResponseHandler.success(
+      res,
+      200,
+      conversation,
+      "Group info updated"
+    );
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const addNewMemberToChannel = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { conversationId } = req.params;
+    const { username } = req.body;
+    const { _id } = req.authUser!;
+
+    const user = await User.findOne({
+      username,
+    });
+
+    if (!user) {
+      throw new HttpError(404, "User not found");
+    }
+
+    let conversation = await Conversation.findOne({
+      _id,
+      type: "channel",
+    });
+
+    if (!conversation) {
+      throw new HttpError(
+        404,
+        "Channel conversation not found or you are not a member of this conversation"
+      );
+    }
+
+    conversation.members.push(user._id);
+
+    try {
+      await conversation.save();
+    } catch (error: any) {
+      throw new HttpError(error.statusCode || 400, error.message, error.errors);
+    }
+
+    return ResponseHandler.success(
+      res,
+      200,
+      conversation,
+      "Member added to channel"
+    );
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const removeMemberFromChannel = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { conversationId, memberId } = req.params;
+    const { _id } = req.authUser!;
+
+    let conversation = await Conversation.findOne({
+      _id,
+      type: "channel",
+    });
+
+    if (!conversation) {
+      throw new HttpError(
+        404,
+        "Channel conversation not found or you are not a member of this conversation"
+      );
+    }
+
+    conversation.members = conversation.members.filter(
+      (member) => member.toString() !== memberId
+    );
+
+    try {
+      await conversation.save();
+    } catch (error: any) {
+      throw new HttpError(error.statusCode || 400, error.message, error.errors);
+    }
+
+    io.to(`conversation/${conversation._id}`).emit(
+      "conversation/memberRemoved",
+      {
+        conversationId: conversation._id,
+        memberId,
+      }
+    );
+
+    return ResponseHandler.success(
+      res,
+      200,
+      conversation,
+      "Member removed from channel"
+    );
+  } catch (error) {
+    return next(error);
   }
 };

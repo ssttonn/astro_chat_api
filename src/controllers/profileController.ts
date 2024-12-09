@@ -1,13 +1,12 @@
-import { Request, Response, NextFunction } from "express";
-import { s3 } from "../services/aws";
-import { User } from "../models";
-import { CustomResponse, HttpError } from "../utils";
-import ResponseHandler from "../utils/responseHandler";
-import { validationResult } from "express-validator";
 import { DeleteObjectCommand } from "@aws-sdk/client-s3";
 import bcrypt from "bcrypt";
+import { NextFunction, Response } from "express";
 import mongoose from "mongoose";
+import { User } from "../models";
 import { AuthenticatedRequest } from "../models/types";
+import { s3 } from "../services/aws";
+import { HttpError } from "../utils";
+import ResponseHandler from "../utils/responseHandler";
 
 export const getProfile = async (
   req: AuthenticatedRequest,
