@@ -1,28 +1,30 @@
-import { initSocket } from "./src/services/socketIOClient";
+import { initSocket } from ".//services/socketIOClient";
 import express from "express";
 import http from "http";
+import dotenv from "dotenv";
 
+dotenv.config();
 const app = express();
 const server = http.createServer(app);
 const io = initSocket(server);
 
 import cors from "cors";
-
 import { Socket } from "socket.io";
-import "./src/db/mongoose";
-import { socketAuthMiddleware } from "./src/middlewares/authMiddleware";
-import errorHandler from "./src/middlewares/errorHandler";
-import logger from "./src/middlewares/logMiddleware";
-import notFoundHandler from "./src/middlewares/notFoundHandler";
-import router from "./src/routes";
+import "./db/mongoose";
+import { socketAuthMiddleware } from "./middlewares/authMiddleware";
+import errorHandler from "./middlewares/errorHandler";
+import logger from "./middlewares/logMiddleware";
+import notFoundHandler from "./middlewares/notFoundHandler";
+import router from "./routes";
+import helmet from "helmet";
+import morgan from "morgan";
 
 const port = process.env.PORT || 3000;
 
-app.use(
-  cors({
-    origin: "http://localhost:5173",
-  })
-);
+app.use(helmet());
+app.use(helmet.crossOriginResourcePolicy({ policy: "cross-origin" }));
+app.use(morgan("common"));
+app.use(cors());
 
 app.use(express.json());
 

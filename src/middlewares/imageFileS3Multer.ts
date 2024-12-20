@@ -1,9 +1,9 @@
-import multerS3 from "multer-s3";
 import multer from "multer";
+import multerS3 from "multer-s3";
+import { AuthenticatedRequest } from "../models/types";
 import { s3 } from "../services/aws";
 import { HttpError } from "../utils";
-import { Request } from "express";
-import { AuthenticatedRequest } from "../models/types";
+import dotenv from "dotenv";
 
 // Set up multer to use S3 storage
 const upload = multer({
