@@ -5,8 +5,8 @@
   "main": "src/index.js",
   "scripts": {
     "build": "tsc --project tsconfig.json && tsc-alias -p tsconfig.json",
-    "start": "npm run build && node dist/index.js",
-    "dev": "npm run build && concurrently \"npx tsc -w\" \"nodemon --ecec ts-node src/index.ts\"",
+    "start": "NODE_ENV=production npm run build && node dist/index.js",
+    "dev": "NODE_ENV=development npm run build && concurrently \"npx tsc -w\" \"nodemon --ecec ts-node src/index.ts\"",
     "test": "echo \"Error: no test specified\" && exit 1",
     "seed": "ts-node prisma/seed.ts"
   },

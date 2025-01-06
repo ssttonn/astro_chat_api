@@ -86,21 +86,24 @@ io.on("connection", (socket: AuthenticatedSocket) => {
     }
   });
 
-  socket.on("conversation/typing", async (data, ack) => {
+  socket.on("conversation/userTyping", async (data, ack) => {
     try {
       const { conversationId, isTyping } = data;
       const { _id } = socket.authUser!;
 
-      socket.to(`conversation/${conversationId}`).emit("conversation/typing", {
-        userId: _id,
-        isTyping,
-      });
+      socket
+        .to(`conversation/${conversationId}`)
+        .emit("conversation/userTyping", {
+          userId: _id,
+          isTyping,
+        });
+      console.log("Sent typing status", isTyping);
 
       if (!ack) {
         return;
       }
 
-      return ack(SocketResponse.success(true, "Sent typing status"));
+      return ack(SocketResponse.success(null, "Sent typing status"));
     } catch (error: any) {
       return ack(SocketResponse.error(error, error.message));
     }
